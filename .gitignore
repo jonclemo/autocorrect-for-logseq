@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# build output (choose one approach)
+dist/
+# If you WANT dist committed for releases, remove the line above.
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# env
+.env
