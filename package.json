@@ -1,0 +1,43 @@
+{
+  "name": "autocorrect-for-logseq",
+  "version": "0.1.0",
+  "description": "Fast, conservative autocorrect while typing in Logseq (UK English)",
+  "main": "dist/index.js",
+  "scripts": {
+    "prebuild": "npm run inline-dict",
+    "build": "npm run build:esbuild && npm run copy-files",
+    "build:esbuild": "esbuild src/index.ts --bundle --format=iife --outfile=dist/index.js --platform=browser --external:@logseq/libs",
+    "build:tsc": "tsc",
+    "copy-files": "node scripts/copy-files.js",
+    "inline-dict": "ts-node scripts/inline-dict.ts",
+    "watch": "npm run build:esbuild -- --watch",
+    "build-dict": "ts-node scripts/build-dict.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "logseq",
+    "autocorrect",
+    "spellcheck",
+    "uk-english"
+  ],
+  "author": "jonclemo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jonclemo/autocorrect-for-logseq.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jonclemo/autocorrect-for-logseq/issues"
+  },
+  "homepage": "https://github.com/jonclemo/autocorrect-for-logseq#readme",
+  "dependencies": {
+    "@logseq/libs": "^0.2.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
+    "esbuild": "^0.19.11"
+  }
+}
+

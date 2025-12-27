@@ -1,0 +1,10 @@
+{
+  "id": "autocorrect-for-logseq",
+  "name": "autocorrect-for-logseq",
+  "version": "0.1.0",
+  "description": "Fast, conservative autocorrect while typing in Logseq (UK English)",
+  "main": "index.js",
+  "author": "jonclemo",
+  "title": "Autocorrect for Logseq",
+  "license": "MIT"
+}
