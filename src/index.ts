@@ -135,116 +135,221 @@ async function main() {
 
   let suppressNext = false;
   let lastContent = "";
+  let lastBlockUuid: string | null = null;
 
   // Register event handler for autocorrect
-  // Try onInputSelectionEnd - fires when selection changes (e.g., after typing space)
+  // onInputSelectionEnd exists in Logseq API - fires when input selection ends
+  // Reference: https://plugins-doc.logseq.com/logseq/Editor/onInputSelectionEnd
+  console.log("[Autocorrect] Registering onInputSelectionEnd...");
   logseq.Editor.onInputSelectionEnd(async (e: any) => {
-    console.log("[Autocorrect] Event fired!", JSON.stringify(e));
-    
-    if (!logseq.settings?.enabled) {
-      console.log("[Autocorrect] Disabled");
-      return;
-    }
-    if (suppressNext) { 
-      suppressNext = false; 
-      console.log("[Autocorrect] Suppressed");
-      return; 
-    }
+    try {
+      console.log("[Autocorrect] onInputSelectionEnd fired!", e);
+      
+      if (!logseq.settings?.enabled) {
+        return;
+      }
+      if (suppressNext) { 
+        suppressNext = false; 
+        return; 
+      }
 
-    // Get current block content to check what was typed
-    const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
-    if (!block?.uuid) {
-      console.log("[Autocorrect] No block");
-      return;
-    }
-    
-    const content = await logseq.Editor.getEditingBlockContent();
-    console.log("[Autocorrect] Content:", content, "Length:", content.length);
-    
-    // Check if last character is a word boundary trigger
-    const lastChar = content.slice(-1);
-    console.log("[Autocorrect] Last char:", JSON.stringify(lastChar), "Should trigger:", shouldTrigger(lastChar));
-    
-    if (!shouldTrigger(lastChar)) {
-      return;
-    }
+      // Get current block and content
+      const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
+      if (!block?.uuid) {
+        return;
+      }
+      
+      const editing = await logseq.Editor.checkEditing();
+      if (!editing) return;
+      
+      const content = await logseq.Editor.getEditingBlockContent();
+      // Ensure content is a string (Logseq might return null)
+      if (!content || typeof content !== 'string') return;
+      
+      // Check if last character is a word boundary trigger
+      const lastChar = content.slice(-1);
+      if (!shouldTrigger(lastChar)) {
+        return;
+      }
 
-    // Use cached rules if available, otherwise load on demand
-    let currentBase = base;
-    let currentRemote = remote;
-    if (Object.keys(currentBase).length === 0) {
-      console.log("[Autocorrect] Loading dictionary...");
-      currentBase = await loadDictionary();
-      base = currentBase; // Cache it
-      console.log("[Autocorrect] Dictionary loaded:", Object.keys(currentBase).length, "rules");
-    }
-    if (currentRemote === null) {
-      currentRemote = await loadCachedRemoteRules();
-      remote = currentRemote; // Cache it
-    }
-    const currentRules = buildRules(currentRemote, currentBase);
-    console.log("[Autocorrect] Total rules:", Object.keys(currentRules).length);
+      console.log("[Autocorrect] Processing autocorrect, last char:", JSON.stringify(lastChar));
 
-    const editing = await logseq.Editor.checkEditing();
-    if (!editing) return;
-    const pos = await getCursorPos();
-    if (pos === null) {
-      console.log("[Autocorrect] No cursor position");
-      return;
-    }
+      // Use cached rules if available, otherwise load on demand
+      let currentBase = base;
+      let currentRemote = remote;
+      if (Object.keys(currentBase).length === 0) {
+        currentBase = await loadDictionary();
+        base = currentBase; // Cache it
+      }
+      if (currentRemote === null) {
+        currentRemote = await loadCachedRemoteRules();
+        remote = currentRemote; // Cache it
+      }
+      const currentRules = buildRules(currentRemote, currentBase);
 
-    console.log("[Autocorrect] Checking:", content.substring(Math.max(0, pos - 10), pos));
-    const replaced = replaceWordBeforeCursor(content, pos, currentRules);
-    if (!replaced) {
-      console.log("[Autocorrect] No replacement found");
-      return;
-    }
+      const pos = await getCursorPos();
+      if (pos === null) {
+        return;
+      }
 
-    console.log("[Autocorrect] Replacing:", replaced);
-    suppressNext = true;
-    await logseq.Editor.updateBlock(block.uuid, replaced.newText);
-    await logseq.Editor.restoreEditingCursor();
+      const replaced = replaceWordBeforeCursor(content, pos, currentRules);
+      if (!replaced || !replaced.newText || typeof replaced.newText !== 'string') {
+        return;
+      }
+
+      console.log("[Autocorrect] Replacing:", replaced);
+      suppressNext = true;
+      await logseq.Editor.updateBlock(block.uuid, replaced.newText);
+      await logseq.Editor.restoreEditingCursor();
+    } catch (error) {
+      console.error("[Autocorrect] Error in onInputSelectionEnd:", error);
+    }
   });
   
-  console.log("[Autocorrect] Plugin initialized, event handler registered");
+  // Alternative: Use onKeyDown to detect space/Enter (word boundaries)
+  // This might be more reliable than onInputSelectionEnd
+  // Note: onKeyDown fires BEFORE the key is inserted, so we use setTimeout to check after insertion
+  console.log("[Autocorrect] Registering onKeyDown...");
+  try {
+    logseq.App.onKeyDown(async (e: any) => {
+    try {
+      // Only process space and Enter (word boundaries)
+      if (!e || (e.key !== " " && e.key !== "Enter")) return;
+      
+      if (!logseq.settings?.enabled) return;
+      if (suppressNext) { 
+        suppressNext = false; 
+        return; 
+      }
+
+      // Wait a tick for the key to be inserted into the editor
+      setTimeout(async () => {
+        try {
+      const editing = await logseq.Editor.checkEditing();
+      if (!editing) return;
+
+      const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
+      if (!block?.uuid) return;
+      
+      const content = await logseq.Editor.getEditingBlockContent();
+      // Ensure content is a string (Logseq might return null)
+      if (!content || typeof content !== 'string') return;
+
+      // Get rules
+      let currentBase = base;
+      let currentRemote = remote;
+      if (Object.keys(currentBase).length === 0) {
+        currentBase = await loadDictionary();
+        base = currentBase;
+      }
+      if (currentRemote === null) {
+        currentRemote = await loadCachedRemoteRules();
+        remote = currentRemote;
+      }
+      const currentRules = buildRules(currentRemote, currentBase);
+
+      // Get cursor position (should be after the space/Enter)
+      const pos = await getCursorPos();
+      if (pos === null || pos === 0) return;
+      
+      // Check the word before the space/Enter (cursor is after it, so pos-1 is the boundary)
+      const replaced = replaceWordBeforeCursor(content, pos - 1, currentRules);
+      if (!replaced || !replaced.newText || typeof replaced.newText !== 'string') return;
+
+          console.log("[Autocorrect] Replacing via onKeyDown:", replaced);
+          suppressNext = true;
+          await logseq.Editor.updateBlock(block.uuid, replaced.newText);
+          await logseq.Editor.restoreEditingCursor();
+        } catch (error) {
+          console.error("[Autocorrect] Error in onKeyDown setTimeout:", error);
+        }
+      }, 10); // Small delay to ensure key is inserted
+    } catch (error) {
+      console.error("[Autocorrect] Error in onKeyDown:", error);
+    }
+  });
+  } catch (error) {
+    console.warn("[Autocorrect] onKeyDown not available:", error);
+  }
   
-  // Also try onInputTextChanged - fires on every text change (more reliable)
-  logseq.Editor.onInputTextChanged(async ({ content, uuid }) => {
+  // Fallback: Polling approach - check for changes periodically
+  // This is a backup if events don't fire
+  console.log("[Autocorrect] Setting up polling fallback...");
+  let pollingInterval: any = null;
+  
+  async function checkForAutocorrect() {
     if (!logseq.settings?.enabled) return;
-    if (suppressNext) { suppressNext = false; return; }
-    if (!content) return;
-    
-    // Only process if content ends with a word boundary
-    const lastChar = content.slice(-1);
-    if (!shouldTrigger(lastChar)) return;
-    
-    console.log("[Autocorrect] Text changed - last char:", lastChar);
-    
-    // Get cursor position
-    const pos = await getCursorPos();
-    if (pos === null) return;
-    
-    // Get rules
-    let currentBase = base;
-    let currentRemote = remote;
-    if (Object.keys(currentBase).length === 0) {
-      currentBase = await loadDictionary();
-      base = currentBase;
+    if (suppressNext) {
+      suppressNext = false;
+      return;
     }
-    if (currentRemote === null) {
-      currentRemote = await loadCachedRemoteRules();
-      remote = currentRemote;
+
+    try {
+      const editing = await logseq.Editor.checkEditing();
+      if (!editing) return;
+
+      const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
+      if (!block?.uuid) return;
+
+      const content = await logseq.Editor.getEditingBlockContent();
+      if (!content || typeof content !== 'string') return;
+
+      // Skip if same block and no change
+      if (block.uuid === lastBlockUuid) {
+        if (content === lastContent) {
+          // No change, skip
+          return;
+        }
+        // Content changed - update lastContent
+        lastContent = content;
+      } else {
+        // New block
+        lastBlockUuid = block.uuid;
+        lastContent = content;
+        return; // New block, wait for next poll
+      }
+
+      // Check if last character is a word boundary trigger
+      const lastChar = content.slice(-1);
+      if (!shouldTrigger(lastChar)) return;
+
+      // Get rules
+      let currentBase = base;
+      let currentRemote = remote;
+      if (Object.keys(currentBase).length === 0) {
+        currentBase = await loadDictionary();
+        base = currentBase;
+      }
+      if (currentRemote === null) {
+        currentRemote = await loadCachedRemoteRules();
+        remote = currentRemote;
+      }
+      const currentRules = buildRules(currentRemote, currentBase);
+
+      const pos = await getCursorPos();
+      if (pos === null) return;
+
+      // When cursor is after a space/punctuation, we need to check the word BEFORE it
+      // So we use pos - 1 to check at the boundary character
+      const checkPos = pos > 0 ? pos - 1 : pos;
+      const replaced = replaceWordBeforeCursor(content, checkPos, currentRules);
+      if (!replaced || !replaced.newText || typeof replaced.newText !== 'string') return;
+
+      console.log("[Autocorrect] Corrected:", replaced);
+      suppressNext = true;
+      await logseq.Editor.updateBlock(block.uuid, replaced.newText);
+      await logseq.Editor.restoreEditingCursor();
+      lastContent = replaced.newText;
+    } catch (error) {
+      console.error("[Autocorrect] Error in polling:", error);
     }
-    const currentRules = buildRules(currentRemote, currentBase);
-    
-    const replaced = replaceWordBeforeCursor(content, pos, currentRules);
-    if (!replaced) return;
-    
-    console.log("[Autocorrect] Replacing via text changed event");
-    suppressNext = true;
-    await logseq.Editor.updateBlock(uuid, replaced.newText);
-    await logseq.Editor.restoreEditingCursor();
-  });
+  }
+
+  // Start polling every 300ms when editing
+  pollingInterval = setInterval(checkForAutocorrect, 300);
+  console.log("[Autocorrect] Polling interval started (300ms)");
+  
+  console.log("[Autocorrect] Plugin initialized, event handlers registered");
 
   // Optional: command to re-load rules (useful if user edited settings)
   logseq.App.registerCommandPalette(
