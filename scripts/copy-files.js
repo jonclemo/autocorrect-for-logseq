@@ -31,6 +31,8 @@ if (fs.existsSync(packageSource)) {
   if (packageContent.logseq && packageContent.logseq.icon) {
     packageContent.logseq.icon = packageContent.logseq.icon.replace(/^\.\//, '');
   }
+  // Add readme field pointing to README.md (relative to dist folder)
+  packageContent.readme = 'README.md';
   fs.writeFileSync(packageDest, JSON.stringify(packageContent, null, 2));
   console.log('✓ Copied package.json to dist/ (adjusted for dist folder)');
 } else {
@@ -57,5 +59,16 @@ if (fs.existsSync(assetsSource)) {
     }
   });
   console.log('✓ Copied assets to dist/');
+}
+
+// Copy README.md to dist folder
+const readmeSource = path.join(__dirname, '..', 'README.md');
+const readmeDest = path.join(__dirname, '..', 'dist', 'README.md');
+
+if (fs.existsSync(readmeSource)) {
+  fs.copyFileSync(readmeSource, readmeDest);
+  console.log('✓ Copied README.md to dist/');
+} else {
+  console.warn('⚠ README.md not found in root directory (optional)');
 }
 

@@ -30,6 +30,7 @@
     "url": "https://github.com/jonclemo/autocorrect-for-logseq/issues"
   },
   "homepage": "https://github.com/jonclemo/autocorrect-for-logseq#readme",
+  "readme": "README.md",
   "icon": "./assets/icon_autocorrect_logseq.png",
   "logseq": {
     "id": "autocorrect-for-logseq",

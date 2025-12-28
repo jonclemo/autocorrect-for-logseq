@@ -1,32 +1,23 @@
 # Autocorrect for Logseq (UK English)
-
 Fast, conservative autocorrect while typing in Logseq.  
 Fixes common typos on **word boundaries** (space / punctuation / Enter) without heavy linting, grammar checking, or cloud services.
-
 This plugin is designed to feel invisible: you type, mistakes quietly disappear, and your notes remain plain Markdown.
-
 **UK English Focus**: This extension prefers UK English spellings (colour, favour, organise, etc.) and will never auto-convert UK → US spellings.
 
+![Autocorrect in action](assets/autocorrect_logseq.gif)
+
 ---
-
 ## Why this exists
-
 Logseq’s built-in spellcheck highlights mistakes, but **fixing them interrupts flow**.  
 Other tools add grammar or style “linting” that feels slow, noisy, or distracting.
-
 **Autocorrect for Logseq** exists to solve a narrower problem:
-
 - You write quickly
 - You make predictable typos
 - You want them fixed instantly
 - You *don’t* want grammar rules, popups, or background scanning
-
 This plugin does one thing well: **safe, instant typo correction while typing**.
-
 ---
-
 ## What it does
-
 - Autocorrects common typos only when you finish a word (on word boundaries)
 - Operates only on the **currently edited block**
 - Keeps your notes as plain `.md` files
@@ -34,9 +25,7 @@ This plugin does one thing well: **safe, instant typo correction while typing**.
 - Supports optional, cached remote dictionary updates
 - **UK English preferred**: Never corrects UK spellings (colour, favour, etc.)
 - **Conservative**: Avoids ambiguous corrections (won't change "from" to "form")
-
 ### Examples
-
 Common typos that get corrected:
 - `teh` → `the`
 - `helath` → `health`
@@ -49,10 +38,7 @@ UK English words that are **never** corrected:
 - `organise`, `realise`, `recognise`, `analyse`
 - `centre`, `metre`, `theatre`
 - And many more...
-
-
 ---
-
 ## What it does *not* do (by design)
 
 - ❌ No grammar checking
@@ -132,9 +118,11 @@ Access settings via **Settings → Plugins → Autocorrect for Logseq**:
 - **Use remote dictionary updates**: Enable automatic dictionary updates
 - **Remote dictionary URL**: URL to fetch dictionary updates from (JSON format)
 - **Remote update interval**: How often to check for updates (hours)
-- **Personal rules**: Add your own custom corrections in JSON format (matches `base_safe.json`). Multiple rules must be inside curly braces `{}` and separated by commas: `{"typo1": "correction1", "typo2": "correction2"}`. Also supports line-based format: `typo correction` (one per line).
+- **Personal rules**: Add your own custom corrections manually via Settings. Supports JSON format (matches `base_safe.json`) or line-based format. Multiple JSON rules must be inside curly braces `{}` and separated by commas: `{"typo1": "correction1", "typo2": "correction2"}`. See "Personal Rules Format" section below for details.
 
 ### Personal Rules Format
+
+Personal rules can be added manually in the plugin settings. There are two supported formats:
 
 **JSON format (recommended, matches dictionary format):**
 
@@ -155,6 +143,15 @@ helath health
 ```
 
 Comments (lines starting with `#`) are ignored in line-based format.
+
+**How to add personal rules:**
+1. Go to **Settings → Plugins → Autocorrect for Logseq**
+2. Scroll to **Personal rules**
+3. Enter your rules in either JSON or line-based format
+4. Save settings
+5. Rules are applied immediately (no reload needed)
+
+**Note**: Personal rules must be added manually via Settings. There is no command palette option for adding rules.
 
 ---
 

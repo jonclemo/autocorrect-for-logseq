@@ -85,33 +85,96 @@ async function main() {
   // Debug logging helper (define early so it can be used)
   const debug = () => Boolean(logseq.settings?.debug);
 
+  // MODAL DISABLED - Temporarily disabled due to blocking issues
+  // TODO: Re-implement with a working modal solution
+  /*
+  // Set up Main UI for add word modal
+  logseq.provideUI({
+    key: "add-word-modal",
+    path: "body",
+    template: `...`
+  });
+  */
+
+  // Helper function to get spellcheck suggestions
+  async function getSpellcheckSuggestions(word: string): Promise<string[]> {
+    const suggestions: string[] = [];
+    
+    // Try to use browser spellcheck API if available
+    // Note: Browser spellcheck API is limited, so we'll also check our dictionary
+    try {
+      // Check if word exists in our dictionary (if it does, it's likely correct)
+      const base = await loadDictionary();
+      if (base[word]) {
+        suggestions.push(base[word]);
+      }
+    } catch (e) {
+      // Ignore
+    }
+
+    // Add some common suggestions based on word patterns
+    // This is a simple heuristic - could be improved
+    if (word.length > 2) {
+      // Common typo patterns
+      const commonCorrections: Record<string, string[]> = {
+        'teh': ['the'],
+        'woudl': ['would'],
+        'helath': ['health'],
+        'adn': ['and'],
+        'taht': ['that'],
+        'thsi': ['this'],
+      };
+      
+      if (commonCorrections[word]) {
+        suggestions.push(...commonCorrections[word]);
+      }
+    }
+
+    return [...new Set(suggestions)]; // Remove duplicates
+  }
+
+  // Note: promptForCorrection removed - now using Main UI modal instead
+
+  // Helper function to add rule to personal rules
+  async function addToPersonalRules(typo: string, correction: string): Promise<void> {
+    const currentRules = String(logseq.settings?.personalRules || '');
+    let rulesObj: Record<string, string> = {};
+
+    // Parse existing rules
+    try {
+      if (currentRules.trim().startsWith('{')) {
+        // JSON format
+        rulesObj = JSON.parse(currentRules);
+      } else {
+        // Line-based format - convert to object
+        const parsed = parsePersonalRules(currentRules);
+        rulesObj = parsed;
+      }
+    } catch (e) {
+      // If parsing fails, start fresh
+      rulesObj = {};
+    }
+
+    // Add new rule
+    rulesObj[typo] = correction;
+
+    // Convert back to JSON format (matches base_safe.json)
+    const updatedRules = JSON.stringify(rulesObj, null, 2);
+
+    // Update settings
+    await logseq.updateSettings({ personalRules: updatedRules });
+
+    // Rebuild rules cache
+    const base = await loadDictionary();
+    const remote = await loadCachedRemoteRules();
+  rebuildRules(base, remote);
+  }
+
   // Register commands first (so they're available even if other things fail)
   // Note: On plugin reload, Logseq may log "already exist" warnings - these are harmless
   // and expected when reloading without full unload. Our try-catch handles them gracefully.
-  try {
-    logseq.App.registerCommandPalette(
-      { key: "autocorrect-test", label: "Autocorrect: Test plugin" },
-      async () => {
-        try {
-          const base = await loadDictionary();
-          const remote = await loadCachedRemoteRules();
-          const testRules = buildRules(remote, base);
-          const ruleCount = testRules instanceof Map ? testRules.size : Object.keys(testRules).length;
-          const hasTeh = testRules instanceof Map ? testRules.has("teh") : "teh" in testRules;
-          const enabled = logseq.settings?.enabled !== false;
-          logseq.UI.showMsg(`Rules: ${ruleCount}, "teh": ${hasTeh ? "YES" : "NO"}, Enabled: ${enabled}`);
-        } catch (e: any) {
-          logseq.UI.showMsg(`Test error: ${e?.message || e}`);
-        }
-      }
-    );
-    if (debug()) console.log("[Autocorrect] Command registered");
-  } catch (e: any) {
-    // Ignore "already exists" errors on plugin reload (Logseq logs these internally, but they're harmless)
-    if (e?.message && !e.message.includes("already exist")) {
-      console.error("[Autocorrect] Failed to register command:", e);
-    }
-  }
+  // Commands removed:
+  // - "Autocorrect: Test plugin" - removed
 
   logseq.useSettingsSchema([
     { key: "enabled", type: "boolean", default: true, title: "Enable autocorrect", description: "Enable or disable autocorrect functionality" },
@@ -201,18 +264,45 @@ async function main() {
 
   // Extract shared autocorrect processing logic
   async function processAutocorrect(content: string, pos: number, blockUuid: string): Promise<{ newText: string; newCursorPos: number } | null> {
-    if (!logseq.settings?.enabled) return null;
-    if (shouldSuppress(blockUuid, content)) return null;
+    if (!logseq.settings?.enabled) {
+      if (debug()) console.log("[Autocorrect] processAutocorrect: Disabled in settings");
+      return null;
+    }
+    if (shouldSuppress(blockUuid, content)) {
+      if (debug()) console.log("[Autocorrect] processAutocorrect: Suppressed");
+      return null;
+    }
+
+    // Check if rules are loaded
+    if (cachedRules.size === 0) {
+      if (debug()) console.log("[Autocorrect] processAutocorrect: No rules loaded yet");
+      return null;
+    }
 
     // Check character at cursor position (or before it if at boundary)
     const checkChar = pos > 0 ? content[pos - 1] : content[pos];
-    if (!shouldTrigger(checkChar)) return null;
+    if (!shouldTrigger(checkChar)) {
+      if (debug()) console.log("[Autocorrect] processAutocorrect: No trigger, char:", checkChar, "pos:", pos);
+      return null;
+    }
 
     // Use cached rules (no rebuild needed!)
     const checkPos = pos > 0 ? pos - 1 : pos;
     const replaced = replaceWordBeforeCursor(content, checkPos, cachedRules);
-    if (!replaced || !replaced.newText || typeof replaced.newText !== 'string') return null;
+    if (!replaced || !replaced.newText || typeof replaced.newText !== 'string') {
+      if (debug()) {
+        // Log what word we're checking
+        const left = content.slice(0, checkPos);
+        let i = left.length - 1;
+        while (i >= 0 && !/[\s.,;:!?()[\]{}"']/.test(left[i])) i--;
+        const start = i + 1;
+        const word = left.slice(start);
+        console.log("[Autocorrect] processAutocorrect: No replacement for:", word, "in dict:", cachedRules.has(word.toLowerCase()));
+      }
+      return null;
+    }
 
+    if (debug()) console.log("[Autocorrect] processAutocorrect: Found replacement:", replaced);
     return replaced;
   }
 
@@ -328,7 +418,7 @@ async function main() {
   // DOM event handler for keydown events
   async function handleDOMKeyDown(e: KeyboardEvent) {
     try {
-      console.log("[Autocorrect] DOM: handleDOMKeyDown called");
+      if (debug()) console.log("[Autocorrect] DOM: handleDOMKeyDown called");
       
       if (!logseq.settings?.enabled) {
         if (debug()) console.log("[Autocorrect] DOM: Disabled in settings");
@@ -337,32 +427,32 @@ async function main() {
 
       const editing = await logseq.Editor.checkEditing();
       if (!editing) {
-        console.log("[Autocorrect] DOM: Not editing");
+        if (debug()) console.log("[Autocorrect] DOM: Not editing");
         return;
       }
 
       const content = await logseq.Editor.getEditingBlockContent();
       if (!content || typeof content !== 'string') {
-        console.log("[Autocorrect] DOM: No content");
+        if (debug()) console.log("[Autocorrect] DOM: No content");
         return;
       }
 
       const pos = await getCursorPos();
       if (pos === null) {
-        console.log("[Autocorrect] DOM: No cursor position");
+        if (debug()) console.log("[Autocorrect] DOM: No cursor position");
         return;
       }
 
       const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
       if (!block?.uuid) {
-        console.log("[Autocorrect] DOM: No block");
+        if (debug()) console.log("[Autocorrect] DOM: No block");
         return;
       }
 
-      console.log("[Autocorrect] DOM: Processing autocorrect, content:", content.slice(-10), "pos:", pos);
+      if (debug()) console.log("[Autocorrect] DOM: Processing autocorrect, content:", content.slice(-20), "pos:", pos, "rules loaded:", cachedRules.size);
       const replaced = await processAutocorrect(content, pos, block.uuid);
       if (!replaced) {
-        console.log("[Autocorrect] DOM: No replacement found for word at position", pos);
+        if (debug()) console.log("[Autocorrect] DOM: No replacement found for word at position", pos);
         // Log what word we're checking
         const checkPos = pos > 0 ? pos - 1 : pos;
         const left = content.slice(0, checkPos);
@@ -687,6 +777,11 @@ async function main() {
       console.error("[Autocorrect] Failed to register reload command:", e);
     }
   }
+
+  // Commands removed:
+  // - "Autocorrect: Test plugin" - removed
+  // - "Autocorrect: Add word to personal rules" - removed (modal issues)
+  // Users can manually add rules via Settings → Personal Rules
 }
 
 logseq.ready(main).catch(console.error);
