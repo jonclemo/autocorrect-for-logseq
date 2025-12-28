@@ -7,6 +7,7 @@ import { loadCachedRemoteRules, maybeRefreshRemoteRules } from "./remote";
 // Lazy load dictionary to avoid blocking startup
 let baseSafe: Rules = {};
 let dictionaryLoading: Promise<Rules> | null = null;
+let remote: Rules | null = null; // Module-level for rebuildRules access
 
 function loadDictionarySync(): Rules {
   if (Object.keys(baseSafe).length > 0) return baseSafe;
@@ -49,6 +50,18 @@ async function loadDictionary(): Promise<Rules> {
 function buildRules(remote: Rules | null, base: Rules): Rules {
   const personal = parsePersonalRules(String(logseq.settings?.personalRules || ""));
   return { ...base, ...(remote || {}), ...personal };
+}
+
+// Cached rules - rebuilt only when inputs change
+let cachedRules: Rules = {};
+let personalRulesText = "";
+let baseLoaded = false;
+
+function rebuildRules(base: Rules, remoteRules: Rules | null) {
+  const personal = parsePersonalRules(String(logseq.settings?.personalRules || ""));
+  personalRulesText = String(logseq.settings?.personalRules || "");
+  cachedRules = { ...base, ...(remoteRules || {}), ...personal };
+  console.log("[Autocorrect] Rules rebuilt:", Object.keys(cachedRules).length);
 }
 
 async function getCursorPos(): Promise<number | null> {
@@ -102,8 +115,6 @@ async function main() {
   // Defer all loading to avoid blocking startup
   // Start with empty rules, load dictionary in background
   let base: Rules = {};
-  let remote: Rules | null = null;
-  let rules: Rules = buildRules(remote, base);
   
   // Load dictionary and remote rules asynchronously (non-blocking)
   // Don't await - let it load in background
@@ -111,10 +122,12 @@ async function main() {
     loadDictionary(),
     loadCachedRemoteRules()
   ]).then(([loadedBase, loadedRemote]) => {
+    baseSafe = loadedBase;
     base = loadedBase;
     remote = loadedRemote;
-    rules = buildRules(remote, base);
-    console.log("[Autocorrect] Background loading complete:", Object.keys(rules).length, "rules");
+    baseLoaded = true;
+    rebuildRules(base, remote);
+    console.log("[Autocorrect] Background loading complete:", Object.keys(cachedRules).length, "rules");
   }).catch(console.error);
 
   // Update remote in the background (but still in this session)
@@ -126,14 +139,33 @@ async function main() {
   }).then((refreshed) => {
     if (refreshed) {
       remote = refreshed;
-      loadDictionary().then((loadedBase) => {
-        base = loadedBase;
-        rules = buildRules(remote, base);
-      });
+      if (baseLoaded) {
+        rebuildRules(baseSafe, remote);
+      }
     }
   }).catch(console.error);
 
-  let suppressNext = false;
+  // Listen for settings changes to rebuild rules when personal rules change
+  if (logseq.onSettingsChanged) {
+    logseq.onSettingsChanged((newSettings: any, oldSettings: any) => {
+      const newText = String(newSettings?.personalRules || "");
+      if (newText !== personalRulesText && baseLoaded) {
+        rebuildRules(baseSafe, remote);
+      }
+    });
+  }
+
+  // Suppression counter - more robust than boolean for async operations
+  let suppressCount = 0;
+  
+  function shouldSuppress(): boolean {
+    if (suppressCount > 0) {
+      suppressCount--;
+      return true;
+    }
+    return false;
+  }
+
   let lastContent = "";
   let lastBlockUuid: string | null = null;
 
@@ -148,17 +180,11 @@ async function main() {
       if (!logseq.settings?.enabled) {
         return;
       }
-      if (suppressNext) { 
-        suppressNext = false; 
-        return; 
-      }
-
-      // Get current block and content
-      const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
-      if (!block?.uuid) {
+      if (shouldSuppress()) {
         return;
       }
-      
+
+      // Get content first (cheapest check)
       const editing = await logseq.Editor.checkEditing();
       if (!editing) return;
       
@@ -166,39 +192,33 @@ async function main() {
       // Ensure content is a string (Logseq might return null)
       if (!content || typeof content !== 'string') return;
       
-      // Check if last character is a word boundary trigger
-      const lastChar = content.slice(-1);
-      if (!shouldTrigger(lastChar)) {
-        return;
-      }
-
-      console.log("[Autocorrect] Processing autocorrect, last char:", JSON.stringify(lastChar));
-
-      // Use cached rules if available, otherwise load on demand
-      let currentBase = base;
-      let currentRemote = remote;
-      if (Object.keys(currentBase).length === 0) {
-        currentBase = await loadDictionary();
-        base = currentBase; // Cache it
-      }
-      if (currentRemote === null) {
-        currentRemote = await loadCachedRemoteRules();
-        remote = currentRemote; // Cache it
-      }
-      const currentRules = buildRules(currentRemote, currentBase);
-
+      // Get cursor position first to check character at cursor (not just last char)
       const pos = await getCursorPos();
       if (pos === null) {
         return;
       }
 
-      const replaced = replaceWordBeforeCursor(content, pos, currentRules);
+      // Check character at cursor position (or before it if at boundary)
+      // This fixes mid-text editing edge case
+      const checkChar = pos > 0 ? content[pos - 1] : content[pos];
+      if (!shouldTrigger(checkChar)) {
+        return;
+      }
+
+      // Only now get block (expensive call, but we need UUID for updateBlock)
+      const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
+      if (!block?.uuid) {
+        return;
+      }
+
+      // Use cached rules (no rebuild needed!)
+      const replaced = replaceWordBeforeCursor(content, pos, cachedRules);
       if (!replaced || !replaced.newText || typeof replaced.newText !== 'string') {
         return;
       }
 
       console.log("[Autocorrect] Replacing:", replaced);
-      suppressNext = true;
+      suppressCount += 2; // Suppress next 2 checks
       await logseq.Editor.updateBlock(block.uuid, replaced.newText);
       await logseq.Editor.restoreEditingCursor();
     } catch (error) {
@@ -217,47 +237,38 @@ async function main() {
       if (!e || (e.key !== " " && e.key !== "Enter")) return;
       
       if (!logseq.settings?.enabled) return;
-      if (suppressNext) { 
-        suppressNext = false; 
-        return; 
+      if (shouldSuppress()) {
+        return;
       }
 
       // Wait a tick for the key to be inserted into the editor
       setTimeout(async () => {
         try {
-      const editing = await logseq.Editor.checkEditing();
-      if (!editing) return;
+          const editing = await logseq.Editor.checkEditing();
+          if (!editing) return;
 
-      const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
-      if (!block?.uuid) return;
-      
-      const content = await logseq.Editor.getEditingBlockContent();
-      // Ensure content is a string (Logseq might return null)
-      if (!content || typeof content !== 'string') return;
+          const content = await logseq.Editor.getEditingBlockContent();
+          // Ensure content is a string (Logseq might return null)
+          if (!content || typeof content !== 'string') return;
 
-      // Get rules
-      let currentBase = base;
-      let currentRemote = remote;
-      if (Object.keys(currentBase).length === 0) {
-        currentBase = await loadDictionary();
-        base = currentBase;
-      }
-      if (currentRemote === null) {
-        currentRemote = await loadCachedRemoteRules();
-        remote = currentRemote;
-      }
-      const currentRules = buildRules(currentRemote, currentBase);
+          // Get cursor position first
+          const pos = await getCursorPos();
+          if (pos === null || pos === 0) return;
 
-      // Get cursor position (should be after the space/Enter)
-      const pos = await getCursorPos();
-      if (pos === null || pos === 0) return;
-      
-      // Check the word before the space/Enter (cursor is after it, so pos-1 is the boundary)
-      const replaced = replaceWordBeforeCursor(content, pos - 1, currentRules);
-      if (!replaced || !replaced.newText || typeof replaced.newText !== 'string') return;
+          // Check character at cursor position (or before it if at boundary)
+          const checkChar = pos > 0 ? content[pos - 1] : content[pos];
+          if (!shouldTrigger(checkChar)) return;
+
+          const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
+          if (!block?.uuid) return;
+          
+          // Use cached rules (no rebuild needed!)
+          const checkPos = pos > 0 ? pos - 1 : pos;
+          const replaced = replaceWordBeforeCursor(content, checkPos, cachedRules);
+          if (!replaced || !replaced.newText || typeof replaced.newText !== 'string') return;
 
           console.log("[Autocorrect] Replacing via onKeyDown:", replaced);
-          suppressNext = true;
+          suppressCount += 2; // Suppress next 2 checks
           await logseq.Editor.updateBlock(block.uuid, replaced.newText);
           await logseq.Editor.restoreEditingCursor();
         } catch (error) {
@@ -279,8 +290,7 @@ async function main() {
   
   async function checkForAutocorrect() {
     if (!logseq.settings?.enabled) return;
-    if (suppressNext) {
-      suppressNext = false;
+    if (shouldSuppress()) {
       return;
     }
 
@@ -288,14 +298,12 @@ async function main() {
       const editing = await logseq.Editor.checkEditing();
       if (!editing) return;
 
-      const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
-      if (!block?.uuid) return;
-
+      // Get content first (cheapest check)
       const content = await logseq.Editor.getEditingBlockContent();
       if (!content || typeof content !== 'string') return;
 
-      // Skip if same block and no change
-      if (block.uuid === lastBlockUuid) {
+      // Skip if same block and no change (early exit before expensive calls)
+      if (lastBlockUuid) {
         if (content === lastContent) {
           // No change, skip
           return;
@@ -303,40 +311,50 @@ async function main() {
         // Content changed - update lastContent
         lastContent = content;
       } else {
-        // New block
+        // First time or new block - get block UUID (cache it)
+        const block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
+        if (!block?.uuid) return;
         lastBlockUuid = block.uuid;
         lastContent = content;
         return; // New block, wait for next poll
       }
 
-      // Check if last character is a word boundary trigger
-      const lastChar = content.slice(-1);
-      if (!shouldTrigger(lastChar)) return;
-
-      // Get rules
-      let currentBase = base;
-      let currentRemote = remote;
-      if (Object.keys(currentBase).length === 0) {
-        currentBase = await loadDictionary();
-        base = currentBase;
-      }
-      if (currentRemote === null) {
-        currentRemote = await loadCachedRemoteRules();
-        remote = currentRemote;
-      }
-      const currentRules = buildRules(currentRemote, currentBase);
-
+      // Get cursor position to check character at cursor (not just last char)
+      // This fixes mid-text editing edge case
       const pos = await getCursorPos();
       if (pos === null) return;
 
-      // When cursor is after a space/punctuation, we need to check the word BEFORE it
-      // So we use pos - 1 to check at the boundary character
+      // Check character at cursor position (or before it if at boundary)
+      const checkChar = pos > 0 ? content[pos - 1] : content[pos];
+      if (!shouldTrigger(checkChar)) return;
+
+      // Get block UUID only when we need it (for updateBlock)
+      // We cache lastBlockUuid, but verify it's still valid
+      let block: BlockEntity | null = null;
+      if (lastBlockUuid) {
+        // Try to use cached UUID, but verify block still exists
+        block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
+        if (!block || block.uuid !== lastBlockUuid) {
+          // Block changed, update cache
+          if (block?.uuid) {
+            lastBlockUuid = block.uuid;
+          } else {
+            return; // No block
+          }
+        }
+      } else {
+        block = (await logseq.Editor.getCurrentBlock()) as BlockEntity | null;
+        if (!block?.uuid) return;
+        lastBlockUuid = block.uuid;
+      }
+
+      // Use cached rules (no rebuild needed!)
       const checkPos = pos > 0 ? pos - 1 : pos;
-      const replaced = replaceWordBeforeCursor(content, checkPos, currentRules);
+      const replaced = replaceWordBeforeCursor(content, checkPos, cachedRules);
       if (!replaced || !replaced.newText || typeof replaced.newText !== 'string') return;
 
       console.log("[Autocorrect] Corrected:", replaced);
-      suppressNext = true;
+      suppressCount += 2; // Suppress next 2 checks
       await logseq.Editor.updateBlock(block.uuid, replaced.newText);
       await logseq.Editor.restoreEditingCursor();
       lastContent = replaced.newText;
@@ -356,9 +374,13 @@ async function main() {
     { key: "autocorrect-reload", label: "Autocorrect: Reload rules" },
     async () => {
       baseSafe = {}; // Force reload
-      const base = await loadDictionary();
+      const loadedBase = await loadDictionary();
       const cached = await loadCachedRemoteRules();
-      rules = buildRules(cached, base);
+      baseSafe = loadedBase;
+      base = loadedBase;
+      remote = cached;
+      baseLoaded = true;
+      rebuildRules(baseSafe, remote);
       logseq.UI.showMsg("Autocorrect rules reloaded");
     }
   );
