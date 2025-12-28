@@ -132,19 +132,29 @@ Access settings via **Settings → Plugins → Autocorrect for Logseq**:
 - **Use remote dictionary updates**: Enable automatic dictionary updates
 - **Remote dictionary URL**: URL to fetch dictionary updates from (JSON format)
 - **Remote update interval**: How often to check for updates (hours)
-- **Personal rules**: Add your own custom corrections (one per line: `typo correction`)
+- **Personal rules**: Add your own custom corrections in JSON format (matches `base_safe.json`). Multiple rules must be inside curly braces `{}` and separated by commas: `{"typo1": "correction1", "typo2": "correction2"}`. Also supports line-based format: `typo correction` (one per line).
 
 ### Personal Rules Format
 
-Add custom corrections in the settings:
+**JSON format (recommended, matches dictionary format):**
 
+Multiple rules must be inside curly braces `{}` and separated by commas:
+```json
+{
+  "teh": "the",
+  "woudl": "would",
+  "helath": "health"
+}
+```
+
+**Line-based format (alternative):**
 ```
 teh the
 woudl would
 helath health
 ```
 
-Comments (lines starting with `#`) are ignored.
+Comments (lines starting with `#`) are ignored in line-based format.
 
 ---
 

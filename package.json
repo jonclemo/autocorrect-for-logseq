@@ -30,6 +30,12 @@
     "url": "https://github.com/jonclemo/autocorrect-for-logseq/issues"
   },
   "homepage": "https://github.com/jonclemo/autocorrect-for-logseq#readme",
+  "icon": "./assets/icon_autocorrect_logseq.png",
+  "logseq": {
+    "id": "autocorrect-for-logseq",
+    "title": "Autocorrect for Logseq",
+    "icon": "./assets/icon_autocorrect_logseq.png"
+  },
   "dependencies": {
     "@logseq/libs": "^0.2.10"
   },
