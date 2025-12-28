@@ -5,7 +5,6 @@ This plugin is designed to feel invisible: you type, mistakes quietly disappear,
 **UK English Focus**: This extension prefers UK English spellings (colour, favour, organise, etc.) and will never auto-convert UK → US spellings.
 
 ![Autocorrect in action](assets/autocorrect_logseq.gif)
-
 ---
 ## Why this exists
 Logseq’s built-in spellcheck highlights mistakes, but **fixing them interrupts flow**.  

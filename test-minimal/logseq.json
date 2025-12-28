@@ -1,8 +1,0 @@
-{
-  "id": "test-minimal",
-  "title": "Minimal Test Plugin",
-  "description": "Minimal test plugin to verify Logseq plugin loading",
-  "author": "test",
-  "repo": ""
-}
-

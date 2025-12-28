@@ -12,8 +12,9 @@ Step-by-step instructions to test the plugin in Logseq.
 
 1. Open a terminal/command prompt in the project directory:
    ```bash
-   cd c:\Users\jonat\Code_Development\autocorrect-for-logseq
+   cd /path/to/autocorrect-for-logseq
    ```
+   (Replace `/path/to/autocorrect-for-logseq` with your actual project path)
 
 2. Install dependencies (if not already done):
    ```bash
@@ -27,9 +28,10 @@ Step-by-step instructions to test the plugin in Logseq.
 
 4. Verify the build succeeded - you should see a `dist/` folder with:
    - `index.js`
-   - `autocorrect.js`
-   - `remote.js`
-   - `dictionary/base_safe.json`
+   - `logseq.json`
+   - `package.json`
+   - `README.md`
+   - `assets/` folder (containing icon and GIF)
 
 ## Step 2: Enable Developer Mode in Logseq
 
@@ -45,10 +47,11 @@ Step-by-step instructions to test the plugin in Logseq.
 2. Scroll down to find **Load unpacked plugin** button
 3. Click **Load unpacked plugin**
 4. A file browser will open
-5. Navigate to your project folder:
+5. Navigate to your project's `dist` folder:
    ```
-   C:\Users\jonat\Code_Development\autocorrect-for-logseq\dist
+   /path/to/autocorrect-for-logseq/dist
    ```
+   (Replace `/path/to/autocorrect-for-logseq` with your actual project path)
 6. Select the `dist` folder (or click "Select Folder")
 7. The plugin should now appear in your plugins list
 
@@ -152,6 +155,8 @@ Step-by-step instructions to test the plugin in Logseq.
 3. You should see: **Autocorrect: Reload rules**
 4. Click it → Should show a message "Autocorrect rules reloaded"
 
+**Note**: The "Add word to personal rules" command has been removed. Personal rules must be added manually via Settings.
+
 ## Troubleshooting
 
 ### Plugin doesn't appear
@@ -171,9 +176,10 @@ Step-by-step instructions to test the plugin in Logseq.
 - ✅ Report the issue with steps to reproduce
 
 ### Dictionary not loading
-- ✅ Check that `dist/dictionary/base_safe.json` exists
-- ✅ Verify the file is not empty
+- ✅ Check that the plugin built successfully
+- ✅ Verify `dist/index.js` exists and is not empty
 - ✅ Check console for loading errors
+- ✅ The dictionary is bundled into `index.js`, so no separate dictionary file is needed
 
 ## Expected Behavior Summary
 
