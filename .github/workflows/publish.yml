@@ -1,0 +1,45 @@
+name: Build & Attach Zip to Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Prepare release zip
+        run: |
+          mkdir -p release/autocorrect-for-logseq
+          cp -r dist release/autocorrect-for-logseq/dist
+          cp -r assets release/autocorrect-for-logseq/assets
+          cp logseq.json release/autocorrect-for-logseq/logseq.json
+          cp README.md release/autocorrect-for-logseq/README.md || true
+          cd release
+          zip -r autocorrect-for-logseq.zip autocorrect-for-logseq
+
+      - name: Create GitHub Release + upload asset
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "release/autocorrect-for-logseq.zip"
+          allowUpdates: true
+          generateReleaseNotes: true
