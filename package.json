@@ -5,14 +5,13 @@
   "main": "dist/index.js",
   "scripts": {
     "prebuild": "npm run inline-dict",
-    "build": "npm run build:esbuild && npm run copy-files",
+    "build": "npm run build:esbuild",
     "build:esbuild": "esbuild src/index.ts --bundle --format=iife --outfile=dist/index.js --platform=browser --external:@logseq/libs",
     "build:tsc": "tsc",
-    "copy-files": "node scripts/copy-files.js",
     "inline-dict": "ts-node scripts/inline-dict.ts",
     "watch": "npm run build:esbuild -- --watch",
     "build-dict": "ts-node scripts/build-dict.ts",
-    "clean": "rm -rf dist"
+    "clean": "rimraf dist"
   },
   "keywords": [
     "logseq",
@@ -42,9 +41,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "typescript": "^5.3.3",
+    "esbuild": "^0.19.11",
+    "rimraf": "^6.1.2",
     "ts-node": "^10.9.2",
-    "esbuild": "^0.19.11"
+    "typescript": "^5.3.3"
   }
 }
-
