@@ -29,16 +29,15 @@ jobs:
 
       - name: Prepare release zip
         run: |
-          mkdir -p release/autocorrect-for-logseq
-          # Copy entire dist folder structure (logseq.json, index.js, assets/, README.md, package.json)
-          cp -r dist/* release/autocorrect-for-logseq/
-          # Verify logseq.json exists
-          if [ ! -f release/autocorrect-for-logseq/logseq.json ]; then
-            echo "ERROR: logseq.json not found in dist/"
+          # Create zip directly from dist folder contents
+          # This way, when extracted, files are in the extraction directory (no nested folder)
+          cd dist
+          zip -r ../release/autocorrect-for-logseq.zip .
+          # Verify logseq.json exists in the zip
+          if ! unzip -l ../release/autocorrect-for-logseq.zip | grep -q "logseq.json"; then
+            echo "ERROR: logseq.json not found in zip"
             exit 1
           fi
-          cd release
-          zip -r autocorrect-for-logseq.zip autocorrect-for-logseq
 
       - name: Create GitHub Release + upload asset
         uses: ncipollo/release-action@v1

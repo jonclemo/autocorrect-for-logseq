@@ -1,7 +1,7 @@
 {
   "id": "autocorrect-for-logseq",
   "name": "autocorrect-for-logseq",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Fast, conservative autocorrect while typing in Logseq (UK English)",
   "main": "dist/index.js",
   "icon": "assets/icon_autocorrect_logseq.png",
