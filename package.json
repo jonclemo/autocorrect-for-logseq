@@ -5,9 +5,10 @@
   "main": "dist/index.js",
   "scripts": {
     "prebuild": "npm run inline-dict",
-    "build": "npm run build:esbuild",
+    "build": "npm run build:esbuild && npm run copy-files",
     "build:esbuild": "esbuild src/index.ts --bundle --format=iife --outfile=dist/index.js --platform=browser --external:@logseq/libs",
     "build:tsc": "tsc",
+    "copy-files": "node scripts/copy-files.js",
     "inline-dict": "ts-node scripts/inline-dict.ts",
     "watch": "npm run build:esbuild -- --watch",
     "build-dict": "ts-node scripts/build-dict.ts",

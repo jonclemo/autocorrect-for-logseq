@@ -30,10 +30,13 @@ jobs:
       - name: Prepare release zip
         run: |
           mkdir -p release/autocorrect-for-logseq
-          cp -r dist release/autocorrect-for-logseq/dist
-          cp -r assets release/autocorrect-for-logseq/assets
-          cp logseq.json release/autocorrect-for-logseq/logseq.json
-          cp README.md release/autocorrect-for-logseq/README.md || true
+          # Copy entire dist folder structure (logseq.json, index.js, assets/, README.md, package.json)
+          cp -r dist/* release/autocorrect-for-logseq/
+          # Verify logseq.json exists
+          if [ ! -f release/autocorrect-for-logseq/logseq.json ]; then
+            echo "ERROR: logseq.json not found in dist/"
+            exit 1
+          fi
           cd release
           zip -r autocorrect-for-logseq.zip autocorrect-for-logseq
 

@@ -1,13 +1,23 @@
 const fs = require('fs');
 const path = require('path');
 
-// Copy logseq.json to dist folder
+// Copy logseq.json to dist folder and adjust main field
 const logseqSource = path.join(__dirname, '..', 'logseq.json');
 const logseqDest = path.join(__dirname, '..', 'dist', 'logseq.json');
 
 if (fs.existsSync(logseqSource)) {
-  fs.copyFileSync(logseqSource, logseqDest);
-  console.log('✓ Copied logseq.json to dist/');
+  const logseqContent = JSON.parse(fs.readFileSync(logseqSource, 'utf8'));
+  // Adjust main field - if it points to dist/index.js, change to just index.js
+  // since we're already in the dist folder
+  if (logseqContent.main && logseqContent.main.startsWith('dist/')) {
+    logseqContent.main = logseqContent.main.replace('dist/', '');
+  }
+  // Adjust icon path if needed (remove ./ prefix)
+  if (logseqContent.icon && logseqContent.icon.startsWith('./')) {
+    logseqContent.icon = logseqContent.icon.replace('./', '');
+  }
+  fs.writeFileSync(logseqDest, JSON.stringify(logseqContent, null, 2));
+  console.log('✓ Copied logseq.json to dist/ (adjusted main field)');
 } else {
   console.error('✗ logseq.json not found in root directory');
   process.exit(1);
