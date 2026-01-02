@@ -225,3 +225,6 @@ Contributions are welcome! Please:
 
 - Dictionary data from [codespell](https://github.com/codespell-project/codespell) project
 - Built for [Logseq](https://logseq.com/)
+
+## Changelog
+See [CHANGELOG.md](./CHANGELOG.md) for full release history.

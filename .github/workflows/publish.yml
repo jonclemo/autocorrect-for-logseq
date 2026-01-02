@@ -29,12 +29,22 @@ jobs:
 
       - name: Prepare release zip
         run: |
+          # Verify logseq.json exists in dist before creating zip
+          if [ ! -f dist/logseq.json ]; then
+            echo "ERROR: logseq.json not found in dist/"
+            exit 1
+          fi
+          # Create release directory
+          mkdir -p release
           # Create zip directly from dist folder contents
           # This way, when extracted, files are in the extraction directory (no nested folder)
           cd dist
           zip -r ../release/autocorrect-for-logseq.zip .
+          cd ..
           # Verify logseq.json exists in the zip
-          if ! unzip -l ../release/autocorrect-for-logseq.zip | grep -q "logseq.json"; then
+          if unzip -l release/autocorrect-for-logseq.zip | grep -q "logseq.json"; then
+            echo "✓ Release zip created successfully with logseq.json"
+          else
             echo "ERROR: logseq.json not found in zip"
             exit 1
           fi
